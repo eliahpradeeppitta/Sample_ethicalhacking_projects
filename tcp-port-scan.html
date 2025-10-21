@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Custom Tool Development: TCP Port Scanner</title>
+  <link rel="stylesheet" href="report.css" />
+</head>
+<body>
+  <article class="report">
+    <header>
+      <h1>Custom Tool Development: TCP Port Scanner</h1>
+      <p class="author">© 2025 TCP Port Scanner by eliahpradeeppitta | Ethical Hacking Portfolio</p>
+    </header>
+
+    <section>
+      <h2>1. Project Overview</h2>
+      <p>This project involves the development of a high-performance, command-line TCP port scanner written in Python 3. This tool demonstrates practical understanding of network protocols, low-level socket programming, and concurrent processing using multithreading.</p>
+      <h3>Key Features:</h3>
+      <ul>
+        <li><b>Fundamental Scanning:</b> Identifies open ports on a target IP address or hostname.</li>
+        <li><b>Multithreading:</b> Utilizes Python's threading module to perform concurrent scans, significantly reducing the overall scan time.</li>
+        <li><b>Banner Grabbing:</b> Attempts to retrieve the service banner (version/name information) from open ports, a crucial step in the enumeration phase of a penetration test.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2. Underlying Networking Principle: The TCP 3-Way Handshake</h2>
+      <p>The fundamental networking concept demonstrated by this tool is the TCP 3-Way Handshake.</p>
+      <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr><th>Step</th><th>Scanner Action</th><th>Target Response</th><th>Port Status</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>SYN</td><td>The scanner sends a SYN (synchronize) packet to the target port.</td><td>Checking/waiting</td><td>checking/waiting</td></tr>
+          <tr><td>SYN-ACK</td><td>If the port is listening (open), the target sends a SYN-ACK (synchronize-acknowledge) packet back.</td>
+            <td>s.connect_ex() returns 0</td>
+            <td>OPEN</td></tr>
+          <tr><td>RST or Timeout</td>
+            <td>If the port is not listening (closed/filtered), the target sends a RST (reset) packet, or the connection simply times out.</td>
+            <td>s.connect_ex() returns an error code (≠0)</td>
+            <td>CLOSED/FILTERED</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p>Our scanner works by initiating the first two steps of this handshake. If a successful connection is established (result == 0), the port is marked as open. If a connection cannot be established within the defined SCAN_TIMEOUT, the port is ignored. This proof of concept shows the attacker's ability to probe a target's network stack directly.</p>
+    </section>
+
+    <section>
+      <h2>3. Technical Breakdown and Code Logic</h2>
+      <h3>A. The socket Module</h3>
+      <ul>
+        <li><code>socket.socket(socket.AF_INET, socket.SOCK_STREAM)</code>: This command creates a new socket object, specifying IPv4 (AF_INET) and TCP (SOCK_STREAM).</li>
+        <li><code>s.settimeout(SCAN_TIMEOUT)</code>: This ensures the scanner doesn't hang indefinitely on a filtered or unreachable port, allowing the scan to complete efficiently.</li>
+        <li><code>s.connect_ex((target_ip, port))</code>: This is the key function. It attempts to connect and returns 0 upon success (open port) or an error code otherwise, avoiding the need for complex exception handling on closed ports.</li>
+      </ul>
+
+      <h3>B. Multithreading Implementation</h3>
+      <ul>
+        <li><strong>threading</strong>: We use <code>threading.Thread</code> to create NUM_THREADS (e.g., 100) worker threads.</li>
+        <li><strong>queue</strong>: The <code>queue.Queue()</code> object safely manages the list of ports to scan. Each worker thread pulls a port from the queue using <code>queue.get()</code>, ensuring no two threads attempt to scan the same port.</li>
+        <li><code>queue.join()</code>: The main function waits for <code>queue.join()</code> to ensure all ports have been processed before declaring the scan complete.</li>
+      </ul>
+
+      <h3>C. Banner Grabbing</h3>
+      <ul>
+        <li><code>s.send(b'Hello\r\n')</code>: Sends a small, non-threatening packet to the service. This often prompts the service (like a web server or SSH daemon) to respond with its initial banner message.</li>
+        <li><code>s.recv(4096)</code>: Reads the first 4096 bytes of the response. This data often contains the service name, version number, and operating system details, providing the attacker with vital information for selecting a targeted exploit.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>4. Usage</h2>
+      <p>To run the scanner, execute the script from the command line:</p>
+      <pre>
+# Basic usage: scans ports 1 through 1024
+python3 port_scanner.py 192.168.1.1 
+
+# Scanning a custom range (e.g., high ports)
+python3 port_scanner.py scanme.nmap.org -p 50000-65535
+
+# Scanning specific, popular ports
+python3 port_scanner.py 10.0.0.5 -p 21,22,80,443,3389
+      </pre>
+      <h3>Example Output:</h3>
+      <pre>
+--- Starting Scan ---
+Target: 10.0.0.5
+Ports: 5
+Threads: 100
+Timeout: 1.0s
+-----------------------
+
+| [+] Port 22 is OPEN
+|  -> Banner: SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.7...
+| [+] Port 80 is OPEN
+|  -> Banner: HTTP/1.1 400 Bad Request...
+
+--- Scan Complete ---
+
+  </pre>
+ </section>
+<section>
+
+      <h2>5. Step-by-Step Execution Guide</h2>
+      <h3>Prerequisites</h3>
+      <ul>
+        <li><strong>Python</strong>: Ensure you have Python 3 installed on your system (Kali Linux, Windows, or macOS).</li>
+        <li><strong>Save the Script</strong>: Save the provided code into a file named<code>port_scanner.py</code>.</li>
+      </ul>
+
+      <h3>Step 1: Open your terminal</h3>
+      <p>Use the <code>cd</code> command to navigate to the directory where you saved <code>port_scanner.py</code>.</p>
+      <pre>
+# Example if you saved it in your Documents/Projects folder
+cd Documents/Projects
+      </pre>
+
+      <h3>Step 2: Basic Scan (Default Range)</h3>
+      <p>The scanner defaults to scanning ports 1 through 1024 if you don't provide a specific port argument. This is the simplest way to run it.</p>
+      <p>You must provide a target IP address or a resolvable hostname (like scanme.nmap.org).</p>
+      <pre>
+Command:
+python3 port_scanner.py [Target_IP_Address]
+
+Example:
+python3 port_scanner.py 192.168.1.1 
+      </pre>
+      <p>Wait until the script prints <code>--- Scan Complete ---</code>. Any open ports and their banners will be printed above.</p>
+
+      <h3>Step 3: Scan a Custom Port Range</h3>
+      <p>If you want to scan a high port range or a much smaller one, use the <code>-p</code> or <code>--ports</code> flag followed by the start and end port separated by a hyphen (-).</p>
+      <pre>
+Command:
+python3 port_scanner.py [Target_IP_Address] -p [Start_Port]-[End_Port]
+
+Example (Scanning only ports 8000 to 8080):
+python3 port_scanner.py 192.168.1.100 -p 8000-8080
+      </pre>
+
+      <h3>Step 4: Scan Specific, Popular Ports</h3>
+      <p>To check for a list of known service ports, separate them with commas (,). This is the fastest method when you are hunting for specific services.</p>
+      <pre>
+Command:
+python3 port_scanner.py [Target_IP_Address] -p [Port1],[Port2],[Port3],...
+
+Example (Scanning common web and remote access ports):
+python3 port_scanner.py target.local -p 21,22,80,443,3389
+      </pre>
+    </section>
+<section>
+  <h3>TCP Port Scanner: Python Source Code + explaination</h3>
+  <div class="code-wrapper">
+    <pre>
+        <code>
+import socket
+import argparse
+from threading import Thread, Lock
+from queue import Queue
+import ipaddress
+
+# --- Configuration ---
+# Number of threads to run concurrently
+NUM_THREADS = 100
+# Timeout for socket connection attempts in seconds
+SCAN_TIMEOUT = 1.0
+
+# Queue to hold ports that need to be scanned
+queue = Queue()
+# Lock to ensure clean printing from multiple threads
+screen_lock = Lock()
+
+def is_valid_ip(ip):
+"""Checks if the provided string is a valid IPv4 or IPv6 address."""
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
+def scan_port(target_ip, port):
+"""
+The core function that attempts to connect to a specific port on the target IP.
+This simulates the first two steps of the TCP 3-way handshake (SYN -> SYN-ACK).
+"""
+try:
+     # 1. Create a raw TCP socket
+     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
+    # 2. Set the timeout for the connection attempt
+    s.settimeout(SCAN_TIMEOUT)
+        
+    # 3. Attempt to connect (the 'SYN' part of the handshake)
+    result = s.connect_ex((target_ip, port))
+        
+    if result == 0:
+     # Connection successful (SYN-ACK received) - Port is OPEN
+            
+    # Use the screen lock before printing to prevent thread overlap
+    with screen_lock:
+        print(f"| [+] Port {port:5} is OPEN")
+            
+    # --- Intermediate Upgrade: Banner Grabbing ---
+    # Try to grab the service banner if the port is open
+     try:
+        # Send a blank line or request (sometimes needed to trigger a banner)
+        s.send(b'Hello\r\n')
+        # Receive up to 4096 bytes of data (the service banner)
+        banner = s.recv(4096).decode('utf-8', errors='ignore').strip()
+         if banner:
+        with screen_lock:
+    # Print the banner on a new line for cleanliness
+        print(f"|     -> Banner: {banner[:100]}...")
+                
+        except socket.error:
+    # Handle cases where the banner read fails
+        pass 
+# The 'result' is non-zero (often 111 for connection refused or other error codes for filtered)
+# We don't print closed/filtered ports to keep the output clean.
+
+except socket.gaierror:
+    # Handle invalid hostnames
+        with screen_lock:
+    print(f"| [!] Error resolving hostname: {target_ip}. Skipping.")
+    except Exception as e:
+        # Catch any unexpected errors during the scan
+        with screen_lock:
+    print(f"| [!] An unexpected error occurred on port {port}: {e}")
+    finally:
+    # Crucial: always close the socket
+    s.close()
+
+
+def worker():
+    Thread worker function. Each thread continuously grabs a port from the queue
+    and calls the scan_port function until the queue is empty.
+
+    while True:
+        # Get the next port from the queue
+        port = queue.get()
+
+        # Call the scanning logic
+        # We assume the target_ip is passed to the main function, 
+        # but for simplicity in this structure, we'll retrieve it if needed
+        # In this multi-threaded design, we need to pass IP to the worker or rely on a global context.
+        # Since 'queue' only holds 'port' numbers, we rely on the global scope for the 'target_ip'
+        # which is populated in the 'main' function context (a safe pattern here).
+        
+        # NOTE: For this specific implementation, we rely on 'target_ip' being defined 
+        # in the main function's execution scope before threading starts.
+        global target_ip
+        scan_port(target_ip, port)
+
+        # Signal that the task is complete
+        queue.task_done()
+
+
+def main():
+"""Parses arguments, initializes threads, and starts the scan."""
+global target_ip # Use the global IP variable for the worker function
+    
+parser = argparse.ArgumentParser(description="A fast, multithreaded TCP Port Scanner with banner grabbing.")
+parser.add_argument("target", help="The target IP address or hostname to scan.")
+parser.add_argument("-p", "--ports", default="1-1024", help="Port range (e.g., 1-100) or comma-separated list (e.g., 22,80,443). Default is 1-1024.")
+    
+    args = parser.parse_args()
+    target_ip = args.target
+
+    if not is_valid_ip(target_ip) and not target_ip.isalpha():
+        print(f"| [E] Invalid target specified: {target_ip}")
+        return
+
+# 1. Prepare the list of ports
+    ports_to_scan = []
+    try:
+    if '-' in args.ports:
+            # Handle port range (e.g., 1-1024)
+            start, end = map(int, args.ports.split('-'))
+            ports_to_scan = range(start, end + 1)
+    elif ',' in args.ports:
+            # Handle comma-separated list (e.g., 22,80,443)
+            ports_to_scan = [int(p.strip()) for p in args.ports.split(',')]
+    else:
+            # Handle single port
+            ports_to_scan = [int(args.ports)]
+    except ValueError:
+        print("| [E] Invalid port format. Use N-M or N,M,L format.")
+        return
+
+    print(f"\n| --- Starting Scan ---")
+    print(f"| Target: {target_ip}")
+    print(f"| Ports: {len(ports_to_scan)}")
+    print(f"| Threads: {NUM_THREADS}")
+    print(f"| Timeout: {SCAN_TIMEOUT}s")
+    print(f"| -----------------------\n")
+
+# 2. Initialize and start the worker threads
+    for _ in range(NUM_THREADS):
+        t = Thread(target=worker)
+        # Daemon threads close when the main program finishes
+        t.daemon = True
+        t.start()
+
+# 3. Fill the queue with the ports to be scanned
+    for port in ports_to_scan:
+        queue.put(port)
+
+# 4. Wait for the queue to be fully processed (all ports scanned)
+    queue.join()
+
+    print("\n| --- Scan Complete ---")
+
+if __name__ == "__main__":
+    main()
+
+  </code></pre>
+  </div>
+</section>
+</article>
+ <footer>
+    <center>
+    &copy; 2025 Network-Traffic-Analysis by eliahpradeeppitta | Ethical Hacking Portfolio
+    </center>
+  </footer>
+ </body>
+ </html>
